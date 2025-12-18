@@ -103,7 +103,7 @@ export function GameCanvas({ gameState, onCellClick }: { gameState: GameState; o
             <canvas
                 ref={canvasRef}
                 onClick={handleClick}
-                className="w-full h-full cursor-pointer touch-none"
+                className="w-full h-full cursor-pointer touch-manipulation"
                 style={{ width: '100%', height: '100%' }}
             />
         </div>
