@@ -2,26 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Engine } from '../game/Engine';
-import { GameState, GameConfig, Color } from '../game/types';
+import { GameState, GameConfig, Difficulty } from '../game/types';
+import { SoundEngine } from '../utils/audio';
 
 const GAME_CONFIG: GameConfig = {
-    gridSize: 14,
-    maxMoves: 25,
+    gridSize: 4,
+    maxMoves: 10,
+    difficulty: 'EASY',
     colors: [
-        '#EF476F', // Red/Pink
+        '#00D2FC', // Cyan
         '#FFD166', // Yellow
-        '#06D6A0', // Green
-        '#118AB2', // Blue
-        '#073B4C', // Dark Blue
-        '#9D4EDD', // Purple
+        '#FF3B30', // Red
+        '#34C759', // Green
+        '#AF52DE', // Purple
+        '#FF9500', // Orange
     ],
 };
 
 export function useGame() {
     const engineRef = useRef<Engine | null>(null);
+    const soundRef = useRef<SoundEngine | null>(null);
     const [gameState, setGameState] = useState<GameState | null>(null);
 
     useEffect(() => {
+        soundRef.current = new SoundEngine();
         // Initialize engine only once
         const engine = new Engine(GAME_CONFIG);
         engineRef.current = engine;
@@ -36,9 +40,20 @@ export function useGame() {
         };
     }, []);
 
-    const playMove = (color: Color) => {
+    const playMove = (x: number, y: number, color: string) => {
+        soundRef.current?.playClick();
+
         if (engineRef.current) {
-            engineRef.current.playMove(color);
+            const changed = engineRef.current.playMove(x, y, color);
+
+            if (changed > 0) {
+                // Play soothing ripple
+                soundRef.current?.playRipple(changed);
+            }
+        }
+
+        if (engineRef.current?.getState().status === 'WON') {
+            soundRef.current?.playWin();
         }
     };
 
@@ -48,10 +63,28 @@ export function useGame() {
         }
     }
 
+    const setDifficulty = (level: 'EASY' | 'MEDIUM' | 'HARD') => {
+        if (engineRef.current) {
+            engineRef.current.reset(level);
+        }
+    }
+
+    const getHint = () => {
+        soundRef.current?.playHint();
+        return engineRef.current?.getHint();
+    }
+
+    const clearHint = () => {
+        engineRef.current?.clearHint();
+    }
+
     return {
         gameState,
         playMove,
         resetGame,
+        setDifficulty,
+        getHint,
+        clearHint,
         engine: engineRef.current,
         config: GAME_CONFIG
     };

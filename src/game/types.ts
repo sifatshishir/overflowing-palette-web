@@ -17,10 +17,13 @@ export interface GridState {
     size: number;
 }
 
+export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
+
 export interface GameConfig {
     gridSize: number;
     colors: Color[];
     maxMoves: number;
+    difficulty: Difficulty;
 }
 
 export type GameStatus = "PLAYING" | "WON" | "LOST";
@@ -30,4 +33,7 @@ export interface GameState {
     movesLeft: number;
     status: GameStatus;
     currentTurn: number;
+    targetColor: Color;
+    activeHint: { x: number, y: number, color: Color } | null;
+    lastFlood: { x: number, y: number, depth: number }[] | null;
 }

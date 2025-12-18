@@ -1,46 +1,94 @@
 import { Grid } from './Grid';
 import { Color, GameConfig, GameState, GameStatus } from './types';
 
+import { Solver } from './Solver';
+
 export class Engine {
-    private grid: Grid;
+    private grid!: Grid;
     private config: GameConfig;
-    private state: GameState;
+    private state!: GameState;
     private listeners: ((state: GameState) => void)[] = [];
 
     constructor(config: GameConfig) {
         this.config = config;
-        // Initialize Grid
-        const startColor = config.colors[0]; // Simplified start
-        this.grid = new Grid(config.gridSize, startColor, config.colors);
+        this.initGame(config);
+    }
+
+    private initGame(config: GameConfig) {
+        // Random Target
+        const targetColor = config.colors[Math.floor(Math.random() * config.colors.length)];
+
+        // Generate valid grid
+        this.grid = new Grid(config.gridSize, targetColor, config.colors);
+
+        // Calculate moves
+        // For now, simple heuristic based on size for performance instant load
+        // Easy: 4x4 -> ~6 moves?
+        // Med: 8x8 -> ~15 moves?
+        // Hard: 10x10 -> ~20 moves?
+
+        let baseMoves = 0;
+        if (config.difficulty === 'EASY') baseMoves = 6;
+        else if (config.difficulty === 'MEDIUM') baseMoves = 14;
+        else baseMoves = 22;
+
+        // Modifiers
+        let extra = 0;
+        if (config.difficulty === 'EASY') extra = 3;
+        else if (config.difficulty === 'MEDIUM') extra = 1;
+        else extra = 0;
 
         this.state = {
             grid: this.grid.getState(),
-            movesLeft: config.maxMoves,
+            movesLeft: baseMoves + extra,
             status: 'PLAYING',
             currentTurn: 0,
+            targetColor,
+            activeHint: null,
+            lastFlood: null,
         };
     }
 
-    // Main action
-    playMove(color: Color) {
-        if (this.state.status !== 'PLAYING') return;
+    // Main action: Flood fill from a specific cell
+    playMove(x: number, y: number, targetColor: Color): number {
+        if (this.state.status !== 'PLAYING') return 0;
 
-        const { changedCount } = this.grid.flood(color);
+        // Clear hint on any move attempt
+        this.state.activeHint = null;
+        // lastFlood will be set below if valid move
 
-        if (changedCount > 0 || this.state.grid.cells[0][0].color !== color) {
-            // Only count move if it actually changes something or tries to? 
-            // Usually in Flood It, swapping to same color is invalid or no-op. 
-            // If changedCount > 0, valid move.
+        // Validation
+        if (x < 0 || x >= this.config.gridSize || y < 0 || y >= this.config.gridSize) {
+            this.notify(); // Notify to clear hint even if invalid move
+            return 0;
+        }
+
+        const targetCell = this.grid.cells[y][x];
+        const startColor = targetCell.color;
+
+        // No-op if same color
+        if (startColor === targetColor) {
+            this.notify();
+            return 0;
+        }
+
+        const { changedCount, changedCells } = this.grid.floodAt(x, y, targetColor);
+
+        // Store flood data for animation
+        this.state.lastFlood = changedCells;
+
+        if (changedCount > 0) {
             this.state.movesLeft--;
             this.state.currentTurn++;
         }
 
         this.updateStatus();
         this.notify();
+        return changedCount;
     }
 
     private updateStatus() {
-        if (this.grid.isSolved()) {
+        if (this.grid.isSolved(this.state.targetColor)) {
             this.state.status = 'WON';
         } else if (this.state.movesLeft <= 0) {
             this.state.status = 'LOST';
@@ -66,16 +114,37 @@ export class Engine {
         return this.state;
     }
 
-    reset() {
-        // Re-init grid
-        const startColor = this.config.colors[Math.floor(Math.random() * this.config.colors.length)];
-        this.grid = new Grid(this.config.gridSize, startColor, this.config.colors);
-        this.state = {
-            grid: this.grid.getState(),
-            movesLeft: this.config.maxMoves,
-            status: 'PLAYING',
-            currentTurn: 0,
-        };
+    reset(newDifficulty?: 'EASY' | 'MEDIUM' | 'HARD') {
+        if (newDifficulty) {
+            this.config.difficulty = newDifficulty;
+            if (newDifficulty === 'EASY') this.config.gridSize = 4;
+            if (newDifficulty === 'MEDIUM') this.config.gridSize = 8;
+            if (newDifficulty === 'HARD') this.config.gridSize = 10;
+        }
+        this.initGame(this.config);
         this.notify();
+    }
+
+    getHint() {
+        // First, check if winnable
+        const isWinnable = Solver.simulateGreedy(this.grid, this.state.movesLeft, this.state.targetColor, this.config.colors);
+        if (!isWinnable) {
+            return 'DEAD_END';
+        }
+
+        // Use Solver to find a good move
+        const move = Solver.getHint(this.grid, this.state.targetColor, this.config.colors);
+        if (move) {
+            this.state.activeHint = move;
+            this.notify();
+        }
+        return move;
+    }
+
+    clearHint() {
+        if (this.state.activeHint) {
+            this.state.activeHint = null;
+            this.notify();
+        }
     }
 }

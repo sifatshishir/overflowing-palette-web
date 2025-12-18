@@ -29,92 +29,56 @@ export class Grid {
         return cells;
     }
 
-    // Returns the new grid state after a flood
-    flood(targetColor: Color): { cells: Cell[][], changedCount: number } {
-        // Deep copy to avoid mutation of previous state (if we want immutability)
-        // For performance on large grids, we might mutate, but for React it's safer to copy
-        // Let's do a structured clone or simple map-copy for this scale.
-        const newCells = this.cells.map(row => row.map(cell => ({ ...cell })));
+    // Flood fill starting from a specific coordinate
+    floodAt(startX: number, startY: number, targetColor: string): { changedCount: number, changedCells: { x: number, y: number, depth: number }[] } {
+        const startNode = this.cells[startY][startX];
+        const startColor = startNode.color;
 
-        // 1. Identify all currently owned cells
-        // 2. Change their color to targetColor
-        // 3. Check neighbors of all owned cells. If neighbor matches targetColor, it becomes owned.
-        // Repeat 3 until no new cells are added.
+        if (startColor === targetColor) return { changedCount: 0, changedCells: [] };
 
-        // Better approach:
-        // Change all 'owner' cells to targetColor.
-        // Then run a BFS/DFS from (0,0) (or all owners) to find new connected neighbors of targetColor.
-
-        let changed = false;
-        let changedCount = 0;
-
-        // Step 1: Update existing owners
-        for (let y = 0; y < this.size; y++) {
-            for (let x = 0; x < this.size; x++) {
-                if (newCells[y][x].owner) {
-                    if (newCells[y][x].color !== targetColor) {
-                        newCells[y][x].color = targetColor;
-                        changed = true;
-                    }
-                }
-            }
-        }
-
-        if (!changed) return { cells: newCells, changedCount: 0 }; // No move made if color was same
-
-        // Step 2: Expand ownership
-        // We can just iterate until stable or use a queue.
-        // Queue is better. Initialize queue with all owned cells.
-        const queue: Vector2[] = [];
+        const queue: { x: number, y: number, depth: number }[] = [{ x: startX, y: startY, depth: 0 }];
         const visited = new Set<string>();
+        const changedCells: { x: number, y: number, depth: number }[] = [];
 
-        for (let y = 0; y < this.size; y++) {
-            for (let x = 0; x < this.size; x++) {
-                if (newCells[y][x].owner) {
-                    queue.push({ x, y });
-                    visited.add(`${x}-${y}`);
-                }
-            }
-        }
-
-        const directions = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+        visited.add(`${startX},${startY}`);
 
         while (queue.length > 0) {
-            const { x, y } = queue.shift()!;
+            const { x, y, depth } = queue.shift()!;
+            const cell = this.cells[y][x];
 
-            for (const dir of directions) {
-                const nx = x + dir.x;
-                const ny = y + dir.y;
+            // Change color *conceptually* (Engine does it for real via returned data, or we do it here?)
+            // The method logic implies mutating state.
+            cell.color = targetColor;
+            cell.owner = true; // Mark as owned if not already
+
+            changedCells.push({ x, y, depth });
+
+            // Neighbors
+            const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+            for (const [dx, dy] of dirs) {
+                const nx = x + dx;
+                const ny = y + dy;
 
                 if (nx >= 0 && nx < this.size && ny >= 0 && ny < this.size) {
-                    const neighbor = newCells[ny][nx];
-                    const key = `${nx}-${ny}`;
-
+                    const key = `${nx},${ny}`;
                     if (!visited.has(key)) {
-                        if (neighbor.owner) {
-                            // Should be already in queue or processed?
-                            // If logic is correct, all owners started in queue.
-                        } else if (neighbor.color === targetColor) {
-                            // Capture this cell
-                            neighbor.owner = true;
-                            changedCount++;
-                            queue.push({ x: nx, y: ny });
+                        const neighbor = this.cells[ny][nx];
+                        if (neighbor.color === startColor) {
                             visited.add(key);
+                            queue.push({ x: nx, y: ny, depth: depth + 1 });
                         }
                     }
                 }
             }
         }
 
-        this.cells = newCells; // Update internal state
-        return { cells: newCells, changedCount };
+        return { changedCount: changedCells.length, changedCells };
     }
 
-    isSolved(): boolean {
-        const firstColor = this.cells[0][0].color;
+    isSolved(targetColor: Color): boolean {
         for (const row of this.cells) {
             for (const cell of row) {
-                if (!cell.owner || cell.color !== firstColor) return false;
+                if (cell.color !== targetColor) return false;
             }
         }
         return true;
