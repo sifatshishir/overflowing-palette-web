@@ -126,10 +126,16 @@ export class Engine {
     }
 
     getHint() {
-        // First, check if winnable
-        const isWinnable = Solver.simulateGreedy(this.grid, this.state.movesLeft, this.state.targetColor, this.config.colors);
-        if (!isWinnable) {
-            return 'DEAD_END';
+        // For Easy/Medium, we skip the strict winnability check to avoid premature DEAD_END
+        // messages. The greedy solver might be too pessimistic, and we want to allow the 
+        // user to use hints freely given the extra moves provided in these modes.
+        const shouldCheckWinnable = this.config.difficulty === 'HARD';
+
+        if (shouldCheckWinnable) {
+            const isWinnable = Solver.simulateGreedy(this.grid, this.state.movesLeft, this.state.targetColor, this.config.colors);
+            if (!isWinnable) {
+                return 'DEAD_END';
+            }
         }
 
         // Use Solver to find a good move
